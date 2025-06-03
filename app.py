@@ -6,8 +6,8 @@ from twilio.rest import Client
 
 st.set_page_config(layout="wide")
 
-DATA_FILE = 'data/dispatch_data.xlsx'
-os.makedirs("data", exist_ok=True)
+DATA_FILE = 'dispatch_data.xlsx'  # Save/load Excel file in root folder
+# Removed os.makedirs since no folder creation needed
 
 columns = [
     "S.No", "INV DATE", "INV No", "CUSTOMER", "SALES PERSON", "SALE TYPE", "PRODUCT", "MODEL",
@@ -30,8 +30,8 @@ def load_data():
             "QTY": int,
             "PLACE": str,
             "TRANSPORT": str,
-            "LR NUMBER": str,            # changed here
-            "VEHICLE NUMBER": str,       # changed here
+            "LR NUMBER": str,         # Changed to string (can have letters and numbers)
+            "VEHICLE NUMBER": str,    # Changed to string
             "VEHICLE SIZE": float,
             "FREIGHT AMT": float,
             "PAYMENT TERMS": str,
@@ -52,7 +52,7 @@ def save_data(df):
 def send_whatsapp_message(to_number, product, quantity, date):
     try:
         client = Client(st.secrets["twilio"]["account_sid"], st.secrets["twilio"]["auth_token"])
-        client.messages.create(
+        message = client.messages.create(
             body=f"🚚 Hello, your dispatch is ready!\n\n📦 Product: {product}\n🔢 Quantity: {quantity}\n📅 Date: {date}\n✅ Thank you for your business!",
             from_=st.secrets["twilio"]["from_whatsapp"],
             to=f"whatsapp:{to_number}"
@@ -63,18 +63,16 @@ def send_whatsapp_message(to_number, product, quantity, date):
 
 st.title("🚚 Dispatch Entry System")
 
-if "df" not in st.session_state:
-    st.session_state.df = load_data()
+df = load_data()
 
-df = st.session_state.df
-
-# Summary dashboard
+# Summary
 st.subheader("📊 Summary Dashboard")
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Dispatches", len(df))
 col2.metric("Total Quantity", df["QTY"].sum() if not df.empty else 0)
 col3.metric("Total Freight", f"₹{df['FREIGHT AMT'].sum() if not df.empty else 0}")
 
+# Form for new entry
 with st.form("entry_form"):
     st.subheader("➕ New Dispatch Entry")
     c1, c2 = st.columns(2)
@@ -91,9 +89,9 @@ with st.form("entry_form"):
     desp_date = c1.date_input("DESP DATE")
     time = c2.time_input("DESPATCH TIME")
     transport = c1.text_input("TRANSPORT")
-    lr = c2.text_input("LR NUMBER")            # changed here
-    vehicle = c1.text_input("VEHICLE NUMBER")  # changed here
-    size = c2.number_input("VEHICLE SIZE (feet)", min_value=0, step=1)
+    lr = c2.text_input("LR NUMBER")              # Text input for LR NUMBER
+    vehicle = c1.text_input("VEHICLE NUMBER")   # Text input for VEHICLE NUMBER
+    size = c2.number_input("VEHICLE SIZE (feet)", min_value=0.0, step=0.01, format="%.2f")
     freight = c1.number_input("FREIGHT AMT", min_value=0.0, step=0.01, format="%.2f")
     payment_terms = c2.text_input("PAYMENT TERMS")
     payment_status = c1.selectbox("PAYMENT STATUS", ["paid", "pending"])
@@ -118,6 +116,9 @@ with st.form("entry_form"):
             send_whatsapp_message(customer_number, product, qty, desp_date.strftime('%Y-%m-%d'))
             st.success("Entry added successfully!")
 
+            df = load_data()
+
+# Delete option
 st.subheader("🗑️ Delete Dispatch Entry")
 if not df.empty:
     delete_sno = st.selectbox("Select S.No to Delete", df["S.No"].tolist())
@@ -125,17 +126,16 @@ if not df.empty:
         df = df[df["S.No"] != delete_sno].reset_index(drop=True)
         df["S.No"] = range(1, len(df) + 1)
         save_data(df)
-        st.session_state.df = df
         st.success(f"Entry with S.No {delete_sno} deleted successfully!")
+        st.experimental_rerun()
 else:
     st.info("No records available to delete.")
 
+# Show dispatch records table
 st.subheader("📋 Dispatch Records")
 st.dataframe(df)
 
+# Download Excel
 if not df.empty:
     with open(DATA_FILE, "rb") as f:
         st.download_button("⬇️ Download Excel", f, file_name="dispatch_data.xlsx")
-
-
-
